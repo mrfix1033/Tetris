@@ -142,38 +142,72 @@ class FiguresHandler:
         self.create()
 
     def create(self):
-        self.select_figure = random.choice(self.figures).copy()
-        self.color = [random.randint(0, 255) for i in range(3)]
+        self.select_figure = deepcopy(random.choice(self.figures))
+        self.color_now = [random.randint(0, 255) for i in range(3)]
 
     def do_big_tick(self):
-        self.select_figure.down_move()
+        figure_has_moved = self.select_figure.down_move()
+        if figure_has_moved:
+            return
+        self.create()
 
 
 class Figure:
-
     ROTATE_LEFT = -1
     ROTATE_RIGHT = 1
 
     def __init__(self, schem, board):
         self.schem = schem
         self.board = board
+        self.old_render = []
         self.uncompress()
-        self.coords = []
+        self.coords = [main.game.WIDTH // 2 - len(self.schem[0]), 0]
+        self.collide_setup()
+
+    def collide_setup(self):
+        self.down_collide_cells = [0] * len(self.schem[0])
+        for column in range(len(self.schem[0])):
+            for string in range(len(self.schem)):
+                if self.schem[string][column]:
+                    self.down_collide_cells[column] = string
+        self.right_collide_cells = [0] * len(self.schem)
+        for string in range(len(self.schem)):
+            for column in range(len(self.schem[0])):
+                if self.schem[string][column]:
+                    self.right_collide_cells[string] = column
+        self.left_collide_cells = [len(self.schem[0]) - 1] * len(self.schem)
+        for string in range(len(self.schem)):
+            for column in range(len(self.schem[0]) - 1, -1, -1):
+                if self.schem[string][column]:
+                    self.right_collide_cells[string] = column
 
     def compress(self):
-        l_indexes = [all() for i in range()]
+        """максимально сжимает схему фигуры"""
+        self.schem = deepcopy(self.rotate_schem)
+        column_indexes = [any(string[column] for string in self.schem) for column in range(len(self.schem))]
+        str_indexes = [any(string) for string in self.schem]
+        for str_index in range(len(str_indexes) - 1, -1, -1):
+            if not str_indexes[str_index]:
+                self.schem.pop(str_index)
+            if not column_indexes[str_index]:
+                for column_index in self.schem:
+                    column_index.pop(str_index)
 
     def uncompress(self):
-        max_len = max(len(self.schem), len(self.schem[0]))
-        if len(self.schem) > len(self.schem[0]):
-            need_add = (max_len - len(self.schem[0]))
+        """дополняет схему фигуры по сторонам, чтобы она была квадратной"""
+        self.rotate_schem = deepcopy(self.schem)
+        max_len = max(len(self.rotate_schem), len(self.rotate_schem[0]))
+        if len(self.rotate_schem) > len(self.rotate_schem[0]):
+            need_add = (max_len - len(self.rotate_schem[0]))
             need_add_before = need_add // 2
             need_add_after = need_add - need_add_before
-            for i in range(len(self.schem)):
-                self.schem[i] = [0] * need_add_before + self.schem[i] + [0] * need_add_after
+            for column in range(len(self.rotate_schem)):
+                self.rotate_schem[column] = [0] * need_add_before + \
+                                            self.rotate_schem[column] + \
+                                            [0] * need_add_after
         else:
-            self.schem += [[0] * len(self.schem[0]) for i in range(max_len - len(self.schem))]
-
+            self.rotate_schem += [[0] * len(self.rotate_schem[0])
+                                  for i in range(max_len - len(self.rotate_schem))]
 
     def rotate(self, ROTATE):
         length = len(self.rotate_schem)
@@ -184,18 +218,61 @@ class Figure:
                     new_schem[length - y - 1, x] = self.rotate_schem[x][y]
                 else:
                     new_schem[y, length - x - 1] = self.rotate_schem[x][y]
+        self.rotate_schem = new_schem
+        self.compress()
 
     def render_to_board(self):
-        pass
+        for x, y in self.old_render:
+            self.board[x][y] = []
+        self.old_render = []
+        for y in range(len(self.schem)):
+            for x in range(len(self.schem[0])):
+                if self.schem[y][x]:
+                    x += self.coords[0]
+                    y += self.coords[1]
+                    self.board[x, y] = main.game.figures_handler.color_now
+                    self.old_render.append((x, y))
 
     def down_move(self):
-        pass
+        """двигает фигуру вниз, если фигура не была сдвинута, вернет False, иначе True"""
+        if self.check_down_move():
+            self.coords[1] += 1
+            return True
+        return False
 
     def right_move(self):
-        pass
+        """двигает фигуру вправо"""
+        if self.check_right_move():
+            self.coords[0] += 1
 
     def left_move(self):
-        pass
+        """двигает фигуру влево"""
+        if not self.check_left_move():
+            self.coords[0] -= 1
+
+    def check_down_move(self):
+        """проверяется место под фигурой при down_move
+        True - если есть место, False - если нет места"""
+        coords_copy = self.coords.copy()
+        for y in self.down_collide_cells:
+            coords_copy[0] += 1
+            coords_copy[1] = self.coords[1] + y + 1
+
+    def check_right_move(self):
+        """проверяется место справа от фигуры при right_move
+        True - если есть место, False - если нет места"""
+        coords_copy = self.coords.copy()
+        for y in self.down_collide_cells:
+            coords_copy[0] += 1
+            coords_copy[1] = self.coords[1] + y + 1
+
+    def check_left_move(self):
+        """проверяется место слева от  фигуры при left_move
+        True - если есть место, False - если нет места"""
+        coords_copy = self.coords.copy()
+        for y in self.down_collide_cells:
+            coords_copy[0] += 1
+            coords_copy[1] = self.coords[1] + y + 1
 
     def copy(self):
         return Figure(self.schem, self.board)
