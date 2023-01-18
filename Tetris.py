@@ -1,3 +1,4 @@
+import json
 from copy import deepcopy
 
 import pygame
@@ -50,6 +51,7 @@ class Tetris:
         self.board_data = board_data
         self.init_pygame()
         self.extra_init()
+        new_or_old = StartWindow(WIDTH, HEIGHT).open()
         self.start_game_loop()
 
     def init_pygame(self):
@@ -106,13 +108,64 @@ class Main:
         size_cell_scaled = size_cell * SCALE
         WIDTH, HEIGHT = count_x * size_cell_scaled, count_y * size_cell_scaled
         board_data = [count_x, count_y, size_cell_scaled, color]
-        self.start_window = StartWindow(WIDTH, HEIGHT)
+        self.data_handler = DataHandler()
         self.game = Tetris(WIDTH, HEIGHT, FPS, board_data)
 
 
 class StartWindow:
+    def __init__(self, WIDTH, HEIGHT):
+        self.WIDTH = WIDTH
+        self.HEIGHT = HEIGHT
+        self.screen = pygame.Surface((self.WIDTH, self.HEIGHT))
+        pygame.font.init()
+
+    def open(self):
+        tetris_surface = main.game.surface
+        space_was_clicked = False
+        while True:
+            for e in pygame.event.get():
+                if e.type == pygame.K_UP:
+                    if e.key == pygame.K_SPACE and not space_was_clicked:
+                        space_was_clicked = True
+                        data_game = main.data_handler.get_data_game()
+                        if not data_game:
+                            return
+                    elif space_was_clicked:
+                        if e.key == pygame.K_O:
+                            # data_game к моменту использования будет объявленна
+                            main.game.board = data_game[0]
+                            main.game.figures_handler.select_figure = data_game[1]
+                            main.game.figures_handler.color_now = data_game[2]
+                            main.game.score = data_game[3]
+            start_surface = pygame.Surface((main.game.WIDTH, main.game.HEIGHT))
+            if not space_was_clicked:  # самый начальный экран
+            else:
+                font = pygame.font.Font("Intro", 20)
+                titles = [font.render("Вы не завершили прошлую игру", True, [255] * 3),
+                font.render("Чтобы её продолжить нажмите O (англ.)", True, [255] * 3),
+                font.render("Чтобы начать новую нажмите N", True, [255] * 3)]
+                for i in range()
+
+
+            tetris_surface.blit(start_surface, (0, 0))
+            pygame.display.flip()
+
+
+
+
+class DataHandler:
     def __init__(self):
-        self.screen = pygame.Surface()
+        with open("data.txt", encoding='utf8') as file:
+            self.dict = eval(file.read())
+
+    def get_data_game(self):
+        """возращает данные по предыдущей игре если прошлая игра не была завершена, иначе []"""
+        return self.dict.get('data_game', [])
+
+    def save_game(self, board_without_select_figure, select_figure, select_figure_color, score):
+        # example: save_game(board_without_select_figure, [[1, 1], [1, 1]], [255, 0, 255], 30)
+        with open("data.txt", encoding='utf8') as file:
+            file.write(str([board_without_select_figure, select_figure, select_figure_color, score]))
 
 
 class FiguresHandler:
@@ -161,7 +214,7 @@ class Figure:
         self.board = board
         self.old_render = []
         self.uncompress()
-        self.coords = [main.game.WIDTH // 2 - len(self.schem[0]), 0]
+        self.coords = [self.board.WIDTH // 2 - len(self.schem[0]), 0]
         self.collide_setup()
 
     def collide_setup(self):
@@ -210,6 +263,7 @@ class Figure:
                                   for i in range(max_len - len(self.rotate_schem))]
 
     def rotate(self, ROTATE):
+        old_schemas = [deepcopy(self.schem), deepcopy(self.rotate_schem)]
         length = len(self.rotate_schem)
         new_schem = deepcopy(self.rotate_schem)
         for x in range(length):
@@ -220,11 +274,24 @@ class Figure:
                     new_schem[y, length - x - 1] = self.rotate_schem[x][y]
         self.rotate_schem = new_schem
         self.compress()
+        if self.coords[0] + len(self.schem[0]) > self.board.WIDTH:
+            self.coords[0] = self.board.WIDTH - len(self.schem[0])
+        for y in range(len(self.schem)):
+            for x in range(len(self.schem[0])):
+                if self.schem[y][x]:
+                    x += self.coords[0]
+                    y += self.coords[1]
+                    if self.board[x, y]:
+                        self.schem, self.rotate_schem = old_schemas
+                        break
 
-    def render_to_board(self):
+    def clear_rendered(self):
         for x, y in self.old_render:
             self.board[x][y] = []
         self.old_render = []
+
+    def render_to_board(self):
+        self.clear_rendered()
         for y in range(len(self.schem)):
             for x in range(len(self.schem[0])):
                 if self.schem[y][x]:
@@ -253,26 +320,41 @@ class Figure:
     def check_down_move(self):
         """проверяется место под фигурой при down_move
         True - если есть место, False - если нет места"""
+        if len(self.schem) + self.coords[1] > self.board.HEIGHT:
+            return False
         coords_copy = self.coords.copy()
         for y in self.down_collide_cells:
             coords_copy[0] += 1
             coords_copy[1] = self.coords[1] + y + 1
+            if self.board[coords_copy[0], coords_copy[1]]:
+                return False
+        return True  # move after rotate if figure out of bound. and for down_move cancel move
 
     def check_right_move(self):
         """проверяется место справа от фигуры при right_move
         True - если есть место, False - если нет места"""
+        if len(self.schem[0]) + self.coords[0] > self.board.WIDTH:
+            return False
         coords_copy = self.coords.copy()
         for y in self.down_collide_cells:
             coords_copy[0] += 1
             coords_copy[1] = self.coords[1] + y + 1
+            if self.board[coords_copy[0], coords_copy[1]]:
+                return False
+        return True
 
     def check_left_move(self):
         """проверяется место слева от  фигуры при left_move
         True - если есть место, False - если нет места"""
+        if self.coords[0] == 0:
+            return False
         coords_copy = self.coords.copy()
         for y in self.down_collide_cells:
             coords_copy[0] += 1
             coords_copy[1] = self.coords[1] + y + 1
+            if self.board[coords_copy[0], coords_copy[1]]:
+                return False
+        return True
 
     def copy(self):
         return Figure(self.schem, self.board)
