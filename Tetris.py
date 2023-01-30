@@ -6,45 +6,129 @@ import pygame
 import random
 
 
-class Scheduler:
-    def __init__(self):
-        self.keys = list()
-        self.values = list()
+# дополнительные окна
+class Window:
+    def __init__(self, WIDTH, HEIGHT):
+        self.WIDTH = WIDTH
+        self.HEIGHT = HEIGHT
+        self.screen = pygame.Surface((self.WIDTH, self.HEIGHT))
+        pygame.font.init()
 
-    def do_tick(self):
-        for i in range(len(self.keys) - 1, -1, -1):
-            func = list(self.keys)[i]
-            ticks = self.values[i]
-            if ticks == 1:
-                func()
-                self.keys.pop(i)
-                self.values.pop(i)
-                continue
-            self.values[i] -= 1
-
-    def add_task(self, func, ticks):
-        self.keys.append(func)
-        self.values.append(ticks)
+    def open(self):
+        pass
 
 
-class Board:
-    def __init__(self, count_x, count_y, size_cell, color):
-        self.count_x = count_x
-        self.count_y = count_y
-        self.size_cell = size_cell
-        self.color = color
-        self.board = [[[] for _ in range(count_y)] for _ in range(count_x)]
+class EndWindow(Window):
+    def __init__(self, WIDTH, HEIGHT):
+        super().__init__(WIDTH, HEIGHT)
 
-    def render(self, surface: pygame.Surface):
-        sc = self.size_cell
-        for x in range(self.count_x):
-            for y in range(self.count_y):
-                pygame.draw.rect(surface, self.color, (x * sc, y * sc, sc, sc))
-                color_in = self.board[x][y]
-                if not color_in:
-                    color_in = [0] * 3
-                pygame.draw.rect(surface, color_in, (x * sc + 1, y * sc + 1, sc - 2, sc - 2), 0)
-        pygame.draw.rect(surface, "red", (0, sc * main.game.line_level, sc * self.count_x, 2))
+    def open(self):
+        tetris_surface = main.game.surface
+        tetris_surface.fill("black")
+        font_size = 30
+        font_name = pygame.font.get_default_font()  # pygame.font.match_font("Intro", False, False)
+        font = pygame.font.Font(font_name, font_size)
+        titles = [font.render("Всего хорошего!", True, [255] * 3)]
+        center = self.WIDTH // 2, self.HEIGHT // 2
+        for i in range(len(titles)):
+            title = titles[i]
+            tetris_surface.blit(title,
+                                (center[0] - title.get_width() // 2,
+                                 center[1] - (font_size * 1.5 * (len(titles) - i - 2))
+                                 - title.get_height() // 2))
+        pygame.display.flip()
+        i = 0
+        while True:
+            main.game.clock.tick(main.FPS)
+            i += 1
+            if i == 60:
+                sys.exit()
+
+
+class LoseWindow(Window):
+    def __init__(self, WIDTH, HEIGHT):
+        super().__init__(WIDTH, HEIGHT)
+
+    def open(self):
+        tetris_surface = main.game.surface
+        tetris_surface.fill("black")
+
+        font_size = 30
+        font_name = pygame.font.get_default_font()  # pygame.font.match_font("Intro", False, False)
+        font = pygame.font.Font(font_name, font_size)
+        titles = [font.render("Вы проиграли :(", True, [255] * 3),
+                  font.render("Счёт: " + str(main.game.score), True, [255] * 3)]
+        old_score = main.data_handler.get_score()
+        if main.game.score > old_score:
+            titles += [font.render("", True, [255] * 3),
+                       font.render("Новый рекорд!", True, [255] * 3),
+                       font.render("Старый: " + str(old_score), True, [255] * 3),
+                       font.render("Новый: " + str(main.game.score), True, [255] * 3)]
+        center = self.WIDTH // 2, self.HEIGHT // 2
+        for i in range(len(titles)):
+            title = titles[i]
+            tetris_surface.blit(title,
+                                (center[0] - title.get_width() // 2,
+                                 center[1] - (font_size * 1.5 * (len(titles) - i - 2))
+                                 - title.get_height() // 2))
+        pygame.display.flip()
+        while True:
+            main.game.clock.tick(main.FPS)
+            for e in pygame.event.get():
+                if e.type == pygame.QUIT:
+                    EndWindow(self.WIDTH, self.HEIGHT).open()
+                    return
+                elif e.type == pygame.KEYDOWN:
+                    if e.key == pygame.K_SPACE:
+                        main.game.running = False
+                        main.game = Tetris(main.WIDTH, main.HEIGHT, main.FPS, main.board_data)
+                        return
+
+
+class StartWindow(Window):
+    def __init__(self, WIDTH, HEIGHT):
+        super().__init__(WIDTH, HEIGHT)
+
+    def open(self):
+        tetris_surface = main.game.surface
+        font_size = 30
+        font_name = pygame.font.get_default_font()
+        font = pygame.font.Font(font_name, font_size)
+        titles = [font.render("TETRIS", True, [255] * 3),
+                  font.render("Нажмите пробел", True, [255] * 3),
+                  font.render("для начала игры", True, [255] * 3)]
+        center = self.WIDTH // 2, self.HEIGHT // 2
+        for i in range(len(titles)):
+            title = titles[i]
+            tetris_surface.blit(title,
+                                (center[0] - title.get_width() // 2,
+                                 center[1] - (font_size * 1.5 * (len(titles) - i - 2))
+                                 - title.get_height() // 2))
+        pygame.display.flip()
+        while True:
+            main.game.clock.tick(main.FPS)
+            for e in pygame.event.get():
+                if e.type == pygame.QUIT:
+                    EndWindow(self.WIDTH, self.HEIGHT)
+                elif e.type == pygame.KEYDOWN:
+                    if e.key == pygame.K_SPACE:
+                        return
+
+
+class Main:
+    def start(self):
+        self.SCALE = 1
+        self.FPS = 60
+        self.count_x = 10
+        self.count_y = 20
+        self.size_cell = 30
+        self.color = [42] * 3
+        self.size_cell_scaled = self.size_cell * self.SCALE
+        self.WIDTH, self.HEIGHT = self.count_x * self.size_cell_scaled, self.count_y * self.size_cell_scaled
+        self.board_data = [self.count_x, self.count_y, self.size_cell_scaled, self.color]
+        self.data_handler = DataHandler()
+        self.game = Tetris(self.WIDTH, self.HEIGHT, self.FPS, self.board_data)
+        self.game.start_init()
 
 
 class Tetris:
@@ -55,8 +139,9 @@ class Tetris:
         self.FPS = FPS
         self.board_data = board_data
 
-    def start_init(self):
-        self.init_pygame()
+    def start_init(self, with_py_game=True):
+        if with_py_game:
+            self.init_pygame()
         self.extra_init()
         StartWindow(self.WIDTH, self.HEIGHT).open()
         self.start_game_loop()
@@ -93,7 +178,7 @@ class Tetris:
     def do_tick(self):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                self.running = False
+                EndWindow(self.WIDTH, self.HEIGHT).open()
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_a:
                     self.figures_handler.select_figure.left_move()
@@ -114,176 +199,7 @@ class Tetris:
 
     def lose(self):
         self.running = False
-        LoseWindow()
-
-
-class Main:
-    def start(self):
-        SCALE = 1
-        FPS = 60
-        count_x = 10 // 2 + 1
-        count_y = 20 // 2
-        size_cell = 30
-        color = [42] * 3
-        size_cell_scaled = size_cell * SCALE
-        WIDTH, HEIGHT = count_x * size_cell_scaled, count_y * size_cell_scaled
-        board_data = [count_x, count_y, size_cell_scaled, color]
-        self.data_handler = DataHandler()
-        self.game = Tetris(WIDTH, HEIGHT, FPS, board_data)
-        self.game.start_init()
-
-
-class Window:
-    def __init__(self, WIDTH, HEIGHT):
-        self.WIDTH = WIDTH
-        self.HEIGHT = HEIGHT
-        self.screen = pygame.Surface((self.WIDTH, self.HEIGHT))
-        pygame.font.init()
-
-    def open(self):
-        pass
-
-class EndWindow(Window):
-    def __init__(self, WIDTH, HEIGHT):
-        super().__init__(WIDTH, HEIGHT)
-    
-    def open(self):  # todo
-        tetris_surface = main.game.surface
-        space_was_clicked = False
-        while True:
-            for e in pygame.event.get():
-                if e.type == pygame.QUIT:
-                    sys.exit()
-                elif e.type == pygame.KEYDOWN:
-                    if e.key == pygame.K_SPACE and not space_was_clicked:
-                        space_was_clicked = True
-                        data_game = main.data_handler.get_data_game()
-                        if not data_game:
-                            return
-                    elif space_was_clicked:
-                        if e.key == pygame.K_O:
-                            # data_game к моменту использования будет объявленна
-                            main.game.board = data_game[0]
-                            figure = Figure(data_game[1])
-                            figure.coords = data_game[2]
-                            main.game.figures_handler.select_figure = figure
-                            main.game.figures_handler.color_now = data_game[3]
-                            main.game.score = data_game[4]
-                        elif e.key == pygame.K_N:
-                            return
-            font_size = 30
-            font_name = pygame.font.get_default_font()  # pygame.font.match_font("Intro", False, False)
-
-            font = pygame.font.Font(font_name, font_size)
-            if not space_was_clicked:  # самый начальный экран
-                titles = [font.render("TETRIS", True, [255] * 3),
-                          font.render("Нажмите пробел", True, [255] * 3),
-                          font.render("для начала игры", True, [255] * 3)]
-                center = self.WIDTH // 2, self.HEIGHT // 2
-                for i in range(len(titles)):
-                    title = titles[i]
-                    tetris_surface.blit(title,
-                                        (center[0] - title.get_width() // 2,
-                                         center[1] - (font_size * 1.5 * (len(titles) - i - 2))
-                                         - title.get_height() // 2))
-            else:
-                titles = [font.render("Вы не завершили прошлую игру", True, [255] * 3),
-                          font.render("Чтобы её продолжить нажмите O (англ.)", True, [255] * 3),
-                          font.render("Чтобы начать новую нажмите N", True, [255] * 3)]
-                center = tetris_surface.get_width() // 2, tetris_surface.get_height() // 2
-                for i in range(len(titles)):
-                    title = titles[i]
-                    tetris_surface.blit(title,
-                                        (center[0] - title.get_width() // 2,
-                                         font_size * 2 * (i + 1) + center[1] - title.get_height() // 2))
-            pygame.display.flip()
-
-
-class StartWindow(Window):
-    def __init__(self, WIDTH, HEIGHT):
-        super().__init__(WIDTH, HEIGHT)
-
-    def open(self):
-        tetris_surface = main.game.surface
-        space_was_clicked = False
-        while True:
-            for e in pygame.event.get():
-                if e.type == pygame.QUIT:
-                    sys.exit()
-                elif e.type == pygame.KEYDOWN:
-                    if e.key == pygame.K_SPACE and not space_was_clicked:
-                        space_was_clicked = True
-                        data_game = main.data_handler.get_data_game()
-                        if not data_game:
-                            return
-                    elif space_was_clicked:
-                        if e.key == pygame.K_O:
-                            # data_game к моменту использования будет объявленна
-                            main.game.board = data_game[0]
-                            figure = Figure(data_game[1])
-                            figure.coords = data_game[2]
-                            main.game.figures_handler.select_figure = figure
-                            main.game.figures_handler.color_now = data_game[3]
-                            main.game.score = data_game[4]
-                        elif e.key == pygame.K_N:
-                            return
-            font_size = 30
-            font_name = pygame.font.get_default_font()  # pygame.font.match_font("Intro", False, False)
-
-            font = pygame.font.Font(font_name, font_size)
-            if not space_was_clicked:  # самый начальный экран
-                titles = [font.render("TETRIS", True, [255] * 3),
-                          font.render("Нажмите пробел", True, [255] * 3),
-                          font.render("для начала игры", True, [255] * 3)]
-                center = self.WIDTH // 2, self.HEIGHT // 2
-                for i in range(len(titles)):
-                    title = titles[i]
-                    tetris_surface.blit(title,
-                                        (center[0] - title.get_width() // 2,
-                                         center[1] - (font_size * 1.5 * (len(titles) - i - 2))
-                                         - title.get_height() // 2))
-            else:
-                titles = [font.render("Вы не завершили прошлую игру", True, [255] * 3),
-                          font.render("Чтобы её продолжить нажмите O (англ.)", True, [255] * 3),
-                          font.render("Чтобы начать новую нажмите N", True, [255] * 3)]
-                center = tetris_surface.get_width() // 2, tetris_surface.get_height() // 2
-                for i in range(len(titles)):
-                    title = titles[i]
-                    tetris_surface.blit(title,
-                                        (center[0] - title.get_width() // 2,
-                                         font_size * 2 * (i + 1) + center[1] - title.get_height() // 2))
-            pygame.display.flip()
-
-
-class DataHandler:
-    def __init__(self):
-        self.create_if_not_exists("data.txt")
-        with open("data.txt", encoding='utf8') as file:
-            read = file.read()
-        try:
-            self.dict = eval(read)
-        except:
-            self.exception("data.txt")
-            with open("config.txt", 'w', encoding='utf8') as file:
-                file.write("{}")
-
-    def create_if_not_exists(self, filename, s_if_not_exists='{}'):
-        if not os.path.exists(filename):
-            with open(filename, 'w', encoding='utf8') as file:
-                file.write(s_if_not_exists)
-
-    def exception(self, filename):
-        print(f"Возникла ошибка, файл {filename} был сброшен")
-
-    def get_data_game(self):
-        """возращает данные по предыдущей игре если прошлая игра не была завершена, иначе []"""
-        return self.dict.get('data_game', [])
-
-    def save_game(self, board_without_select_figure, select_figure, select_figure_color, score):
-        # example: save_game(board_without_select_figure, [[1, 1], [1, 1]], [255, 0, 255], 30)
-        with open("data.txt", encoding='utf8') as file:
-            file.write(str([board_without_select_figure, select_figure.schem, select_figure.coords,
-                            select_figure_color, score]))
+        LoseWindow(self.WIDTH, self.HEIGHT).open()
 
 
 class FiguresHandler:
@@ -308,7 +224,7 @@ class FiguresHandler:
                          [1, 1]])
         self.T = Figure([[1, 1, 1],
                          [0, 1, 0]])
-        self.figures = [self.O]  # , self.I, self.S, self.Z, self.L, self.J, self.T]
+        self.figures = [self.O, self.I, self.S, self.Z, self.L, self.J, self.T]
         self.create()
 
     def create(self):
@@ -324,6 +240,7 @@ class FiguresHandler:
         for x in range(board.count_x):
             if board.board[x][main.game.line_level - 1]:
                 main.game.lose()
+                return
         strs = []
         for y in range(board.count_y):
             for x in range(board.count_x):
@@ -528,6 +445,70 @@ class Figure:
 
     def copy(self):
         return Figure(self.schem)
+
+
+class DataHandler:
+    def create_if_not_exists(self, filename, s_if_not_exists='{}'):
+        if not os.path.exists(filename):
+            with open(filename, 'w', encoding='utf8') as file:
+                file.write(s_if_not_exists)
+
+    def exception(self, filename):
+        print(f"Возникла ошибка, файл {filename} был сброшен")
+
+    def get_score(self):
+        """возращает максимальный счет, набранный игроком"""
+        self.create_if_not_exists("data.txt")
+        with open("data.txt", encoding='utf8') as file:
+            read = file.read()
+        try:
+            return eval(read).get('score', 0)
+        except:
+            self.exception("data.txt")
+            with open("config.txt", 'w', encoding='utf8') as file:
+                file.write("{}")
+            return 0
+
+
+class Scheduler:
+    def __init__(self):
+        self.keys = list()
+        self.values = list()
+
+    def do_tick(self):
+        for i in range(len(self.keys) - 1, -1, -1):
+            func = list(self.keys)[i]
+            ticks = self.values[i]
+            if ticks == 1:
+                func()
+                self.keys.pop(i)
+                self.values.pop(i)
+                continue
+            self.values[i] -= 1
+
+    def add_task(self, func, ticks):
+        self.keys.append(func)
+        self.values.append(ticks)
+
+
+class Board:
+    def __init__(self, count_x, count_y, size_cell, color):
+        self.count_x = count_x
+        self.count_y = count_y
+        self.size_cell = size_cell
+        self.color = color
+        self.board = [[[] for _ in range(count_y)] for _ in range(count_x)]
+
+    def render(self, surface: pygame.Surface):
+        sc = self.size_cell
+        for x in range(self.count_x):
+            for y in range(self.count_y):
+                pygame.draw.rect(surface, self.color, (x * sc, y * sc, sc, sc))
+                color_in = self.board[x][y]
+                if not color_in:
+                    color_in = [0] * 3
+                pygame.draw.rect(surface, color_in, (x * sc + 1, y * sc + 1, sc - 2, sc - 2), 0)
+        pygame.draw.rect(surface, "red", (0, sc * main.game.line_level, sc * self.count_x, 2))
 
 
 main = Main()
